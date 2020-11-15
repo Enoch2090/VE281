@@ -3,9 +3,8 @@
 #include <forward_list>
 #include <functional>
 #include <math.h>
-#include <stddef.h>
 #include <vector>
-
+#include <iostream> // FIXME: delete this
 /**
  * The Hashtable class
  * The time complexity of functions are based on n and k
@@ -27,7 +26,8 @@ public:
     typedef std::pair<const Key, Value> HashNode;
     typedef std::forward_list<HashNode> HashNodeList;
     typedef std::vector<HashNodeList> HashTableData;
-
+    typedef typename HashTableData::iterator VectorIterator;
+    typedef typename HashNodeList::iterator ListIterator;
     /**
      * A single directional iterator for the hashtable
      * ! DO NOT NEED TO MODIFY THIS !
@@ -35,8 +35,8 @@ public:
     class Iterator
     {
     private:
-        typedef typename HashTableData::iterator VectorIterator;
-        typedef typename HashNodeList::iterator ListIterator;
+//        typedef typename HashTableData::iterator VectorIterator;
+//        typedef typename HashNodeList::iterator ListIterator;
 
         const HashTable* hashTable;
         VectorIterator bucketIt;   // an iterator of the buckets
@@ -150,7 +150,6 @@ protected:                                                                 // DO
 
     HashTableData buckets;                          // buckets, of singly linked lists
     typename HashTableData::iterator firstBucketIt; // help get begin iterator in O(1) time
-
     size_t tableSize;     // number of elements
     double maxLoadFactor; // maximum load factor
     Hash hash;            // hash function instance
@@ -191,14 +190,15 @@ protected:                                                                 // DO
     size_t findMinimumBucketSize(size_t bucketSize) const
     {
         // FIXME: binary search
-        size_t thisMaxLoad = (size_t)floor(tableSize / maxLoadFactor);
+        size_t thisMaxLoad = (size_t)floor((double)tableSize / maxLoadFactor);
         for (size_t i = 0; i < HashPrime::num_distinct_sizes; i++)
         {
             if (HashPrime::g_a_sizes[i] >= bucketSize && HashPrime::g_a_sizes[i] > thisMaxLoad)
             {
-                return HashPrime::g_a_sizes[i]
+                return HashPrime::g_a_sizes[i];
             }
         }
+        throw std::range_error("No such bucket size");
     }
 
     // TODO: define your helper functions here if necessary
@@ -215,7 +215,7 @@ public:
     {
         bucketSize = findMinimumBucketSize(bucketSize);
         buckets.resize(bucketSize);
-        firstBucketIt = buckets.end()
+        firstBucketIt = buckets.end();
     }
 
     HashTable(const HashTable& that)
@@ -232,7 +232,12 @@ public:
     HashTable& operator=(const HashTable& that)
     {
         // FIXME: 
-        HashTable(that);
+        buckets = std::vector<HashNodeList>(that.buckets);
+        firstBucketIt = buckets.end();
+        tableSize = that.tableSize;
+        maxLoadFactor = that.maxLoadFactor;
+        hash = that.hash;
+        keyEqual = that.keyEqual;
         return *this;
     };
 
@@ -274,19 +279,23 @@ public:
     Iterator find(const Key& key)
     {
         // FIXME: implement this function
-        size_t position = hashKey(key, bucketSize);
-        VectorIterator vecIt = buckets.begin() + position;
-        for (auto& listIt : *(vecIt))
+        size_t position;
+        position = (size_t) hashKey(key, buckets.size());
+        std::cout << position << std::endl;
+        VectorIterator vecIt = buckets.begin() + (long)position;
+        for (ListIterator listIt=vecIt->before_begin();listIt!=vecIt->end();++listIt)
         {
-            if (keyEqual(listIt->first, key))
-            {
-                return Iterator(this, vecIt, listIt);
+            auto listItCopy = listIt;
+            if (++listItCopy != vecIt->end()) {
+                if (keyEqual(listItCopy->first, key))
+                {
+                    return Iterator(this, vecIt, listItCopy);
+                }
             }
         }
-        Iterator it = Iterator(this, vecIt, vecIt.before_begin()); // ?
+        Iterator it = Iterator(this, vecIt, vecIt->before_begin()); // ?
         it.endFlag = true;
         return it;
-
     }
 
     /**
@@ -304,13 +313,21 @@ public:
     bool insert(const Iterator& it, const Key& key, const Value& value)
     {
         // FIXME: implement this function
-        if (it.endFlag) {  // The key does not exist
-            it.bucketIt.insert_after(it.listItBefore);
+        if ((double)tableSize >= maxLoadFactor * (double)buckets.size()){
+            rehash(tableSize++);
+        }
+        bool keyExists = !it.endFlag;
+        if (!keyExists) {  // The key does not exist
+            it.bucketIt->insert_after(it.listItBefore, HashNode(key, value));
+            tableSize++;
         }
         else {  // The key exists
-            it.bucketIt.erase(it.listItBefore);
-            it.insert_after(it.bucketIt->before_begin());
+            it.bucketIt->erase_after(it.listItBefore);
+            it.bucketIt->insert_after(it.bucketIt->before_begin(), HashNode(key, value));
         }
+        firstBucketIt = buckets.begin(); // TODO: update firstBucketIt
+        //printTable();
+        return keyExists;
     }
 
     /**
@@ -340,6 +357,13 @@ public:
     bool erase(const Key& key)
     {
         // FIXME: implement this function
+        Iterator it = find(key);
+        bool keyExists = !it.endFlag;
+        if (keyExists) {
+            erase(it);
+        }
+        return keyExists;
+        // TODO: update firstBucketIt;
     }
 
     /**
@@ -358,7 +382,7 @@ public:
         }
         Iterator nextIt = it;
         ++nextIt;
-        it.bucketIt->erase(++it.listItBefore);
+        it.bucketIt->erase_after(++it.listItBefore);
         // TODO: update firstBucketIt;
         return nextIt;
     }
@@ -379,12 +403,9 @@ public:
         if (it.endFlag) { // Key does not exist, create it
             Value v = Value();
             insert(it, key, v);
-            // TODO: update firstBucketIt
-            return v;
         }
         // Key exists
         return (*it).second;
-
     }
 
     /**
@@ -398,10 +419,20 @@ public:
  */
     void rehash(size_t bucketSize)
     {
-        bucketSize = findMinimumBucketSize(bucketSize);
-        if (bucketSize == buckets.size())
-            return;
-        // TODO: implement this function
+        // FIXME: implement this function
+        size_t newBucketSize = findMinimumBucketSize(bucketSize);
+        if (newBucketSize == buckets.size()) return;
+        std::vector<HashNode> tempNodes;
+        for (VectorIterator bucketIt=firstBucketIt; bucketIt!=buckets.end();bucketIt++){
+            for (ListIterator listIt=bucketIt->begin();listIt!=bucketIt->end();listIt++) {
+                tempNodes.push_back(*listIt);
+            }
+        }
+        buckets.resize(newBucketSize);
+        for (auto &node: tempNodes){
+            insert(node.first,node.second);
+        }
+        tableSize = newBucketSize;
     }
 
     /**
@@ -437,5 +468,15 @@ public:
         }
         maxLoadFactor = loadFactor;
         rehash(buckets.size());
+    }
+
+    void printTable(){
+        for (VectorIterator bucketIt=firstBucketIt; bucketIt!=buckets.end(); bucketIt++){
+            if (bucketIt->begin()!=bucketIt->end()){
+                for (ListIterator listIt=bucketIt->begin(); listIt!=bucketIt->end(); listIt++){
+                    std::cout << listIt->first << ": " << listIt->second << "\n";
+                }
+            }
+        }
     }
 };
