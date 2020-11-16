@@ -189,7 +189,6 @@ protected:                                                                 // DO
  */
     size_t findMinimumBucketSize(size_t bucketSize) const
     {
-        // FIXME: binary search
         size_t thisMaxLoad = (size_t)floor((double)tableSize / maxLoadFactor);
         for (size_t i = 0; i < HashPrime::num_distinct_sizes; i++)
         {
@@ -314,22 +313,22 @@ public:
  */
     bool insert(const Iterator& it, const Key& key, const Value& value)
     {
+        //std::cout << "inserting " << key << " endF: " << it.endFlag << ", ";
         // FIXME: implement this function
         bool keyExists = !it.endFlag;
         if (!keyExists) {  // The key does not exist
             it.bucketIt->insert_after(it.listItBefore, HashNode(key, value));
-            if (it.bucketIt->begin()==it.bucketIt->end()){
-                tableSize++;
-                if ((double)tableSize >= maxLoadFactor * (double)buckets.size()){
-                    //std::cout<<tableSize<<" "<< maxLoadFactor * (double)buckets.size() << "\n";
-                    rehash(tableSize);
-                }
+            tableSize++;
+            //std::cout << "Now table size " << tableSize << std::endl;
+            //std::cout << tableSize << std::endl;
+            if ((double)tableSize >= maxLoadFactor * (double)buckets.size()){
+                rehash(buckets.size());
             }
         }
         else {  // The key exists
             it.bucketIt->erase_after(it.listItBefore);
-            it.bucketIt->insert_after(it.bucketIt->before_begin(), HashNode(key, value));
-            tableSize++;
+            HashNode h = HashNode(key, value);
+            it.bucketIt->insert_after(it.bucketIt->before_begin(), h);
         }
         firstBucketIt = buckets.begin(); // TODO: update firstBucketIt
         //printTable();
@@ -407,9 +406,11 @@ public:
     {
         // FIXME: implement this function
         Iterator it = find(key);
+        //std::cout << "Found " << key << " with endFlag " << it.endFlag << std::endl;
         if (it.endFlag) { // Key does not exist, create it
-            insert(it, key, Value());
-            it=find(key);
+            Value v = Value();
+            insert(it, key, v);
+            it = find(key);
         }
         // Key exists
         return (++(it.listItBefore))->second;
@@ -430,6 +431,7 @@ public:
         size_t newBucketSize = findMinimumBucketSize(bucketSize);
         if (newBucketSize == buckets.size()) return;
         std::vector<HashNode> tempNodes;
+        //size_t tableSizeTemp = tableSize;
         for (VectorIterator bucketIt=firstBucketIt; bucketIt!=buckets.end();bucketIt++){
             for (ListIterator listIt=bucketIt->begin();listIt!=bucketIt->end();listIt++) {
                 tempNodes.push_back(*listIt);
@@ -437,10 +439,11 @@ public:
         }
         buckets = HashTableData();
         buckets.resize(newBucketSize);
+        tableSize = 0;
         for (auto &node: tempNodes){
             insert(node.first,node.second);
-            tableSize--;   // insert() will add tableSize, but here we just re-insert the nodes, no increase.
         }
+        //tableSize = tableSizeTemp; // insert() will add tableSize, but here we just re-insert the nodes, no increase.
     }
 
     /**
