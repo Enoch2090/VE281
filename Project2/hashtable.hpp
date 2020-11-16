@@ -281,7 +281,6 @@ public:
         // FIXME: implement this function
         size_t position;
         position = (size_t) hashKey(key, buckets.size());
-        std::cout << position << std::endl;
         VectorIterator vecIt = buckets.begin() + (long)position;
         for (ListIterator listIt=vecIt->before_begin();listIt!=vecIt->end();++listIt)
         {
@@ -292,8 +291,11 @@ public:
                     return Iterator(this, vecIt, listItCopy);
                 }
             }
+            else{
+                break;
+            }
         }
-        Iterator it = Iterator(this, vecIt, vecIt->before_begin()); // ?
+        Iterator it = Iterator(this, vecIt, vecIt->before_begin()); // vecIt is empty
         it.endFlag = true;
         return it;
     }
@@ -313,17 +315,19 @@ public:
     bool insert(const Iterator& it, const Key& key, const Value& value)
     {
         // FIXME: implement this function
-        if ((double)tableSize >= maxLoadFactor * (double)buckets.size()){
-            rehash(tableSize++);
-        }
         bool keyExists = !it.endFlag;
         if (!keyExists) {  // The key does not exist
             it.bucketIt->insert_after(it.listItBefore, HashNode(key, value));
             tableSize++;
+            if ((double)tableSize >= maxLoadFactor * (double)buckets.size()){
+                std::cout<<tableSize<<" "<< maxLoadFactor * (double)buckets.size() << "\n";
+                rehash(tableSize);
+            }
         }
         else {  // The key exists
             it.bucketIt->erase_after(it.listItBefore);
             it.bucketIt->insert_after(it.bucketIt->before_begin(), HashNode(key, value));
+            tableSize++;
         }
         firstBucketIt = buckets.begin(); // TODO: update firstBucketIt
         //printTable();
@@ -383,6 +387,7 @@ public:
         Iterator nextIt = it;
         ++nextIt;
         it.bucketIt->erase_after(++it.listItBefore);
+        tableSize--;
         // TODO: update firstBucketIt;
         return nextIt;
     }
@@ -401,11 +406,11 @@ public:
         // FIXME: implement this function
         Iterator it = find(key);
         if (it.endFlag) { // Key does not exist, create it
-            Value v = Value();
-            insert(it, key, v);
+            insert(it, key, Value());
+            it=find(key);
         }
         // Key exists
-        return (*it).second;
+        return (it.listItBefore)->second;
     }
 
     /**
@@ -428,11 +433,12 @@ public:
                 tempNodes.push_back(*listIt);
             }
         }
+        buckets = HashTableData();
         buckets.resize(newBucketSize);
         for (auto &node: tempNodes){
             insert(node.first,node.second);
+            tableSize--;   // insert() will add tableSize, but here we just re-insert the nodes, no increase.
         }
-        tableSize = newBucketSize;
     }
 
     /**
