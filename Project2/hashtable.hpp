@@ -35,8 +35,8 @@ public:
     class Iterator
     {
     private:
-//        typedef typename HashTableData::iterator VectorIterator;
-//        typedef typename HashNodeList::iterator ListIterator;
+        typedef typename HashTableData::iterator VectorIterator;
+        typedef typename HashNodeList::iterator ListIterator;
 
         const HashTable* hashTable;
         VectorIterator bucketIt;   // an iterator of the buckets
@@ -126,7 +126,7 @@ public:
                 return false;
             if (bucketIt != that.bucketIt)
                 return true;
-            return listItBefore != that.listItBebucket;
+            return listItBefore != that.listItBefore;
         }
 
         HashNode* operator->()
@@ -288,7 +288,7 @@ public:
             if (++listItCopy != vecIt->end()) {
                 if (keyEqual(listItCopy->first, key))
                 {
-                    return Iterator(this, vecIt, listItCopy);
+                    return Iterator(this, vecIt, listIt);
                 }
             }
             else{
@@ -318,10 +318,12 @@ public:
         bool keyExists = !it.endFlag;
         if (!keyExists) {  // The key does not exist
             it.bucketIt->insert_after(it.listItBefore, HashNode(key, value));
-            tableSize++;
-            if ((double)tableSize >= maxLoadFactor * (double)buckets.size()){
-                std::cout<<tableSize<<" "<< maxLoadFactor * (double)buckets.size() << "\n";
-                rehash(tableSize);
+            if (it.bucketIt->begin()==it.bucketIt->end()){
+                tableSize++;
+                if ((double)tableSize >= maxLoadFactor * (double)buckets.size()){
+                    //std::cout<<tableSize<<" "<< maxLoadFactor * (double)buckets.size() << "\n";
+                    rehash(tableSize);
+                }
             }
         }
         else {  // The key exists
@@ -331,7 +333,7 @@ public:
         }
         firstBucketIt = buckets.begin(); // TODO: update firstBucketIt
         //printTable();
-        return keyExists;
+        return !keyExists;
     }
 
     /**
@@ -386,7 +388,7 @@ public:
         }
         Iterator nextIt = it;
         ++nextIt;
-        it.bucketIt->erase_after(++it.listItBefore);
+        it.bucketIt->erase_after(it.listItBefore);
         tableSize--;
         // TODO: update firstBucketIt;
         return nextIt;
@@ -410,7 +412,7 @@ public:
             it=find(key);
         }
         // Key exists
-        return (it.listItBefore)->second;
+        return (++(it.listItBefore))->second;
     }
 
     /**
