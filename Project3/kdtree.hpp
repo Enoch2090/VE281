@@ -151,9 +151,9 @@ protected:                      // DO NOT USE private HERE!
      */
     template<size_t DIM>
     Node* find(const Key& key, Node* node) {
-        constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
-        // FIXME: implement this function
-
+        //constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
+        // FIXME: implemented
+        return findHelper<DIM>(root, key);
     }
 
     /**
@@ -168,8 +168,9 @@ protected:                      // DO NOT USE private HERE!
      */
     template<size_t DIM>
     bool insert(const Key& key, const Value& value, Node*& node, Node* parent) {
-        constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
-        // TODO: implement this function
+        // constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
+        // FIXME: implemented
+        return insertHelper(node, key, value, parent);
     }
 
     /**
@@ -214,8 +215,9 @@ protected:                      // DO NOT USE private HERE!
      */
     template<size_t DIM_CMP, size_t DIM>
     Node* findMin(Node* node) {
-        constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
-        // TODO: implement this function
+        //constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
+        // FIXME: implemented
+        return findMinHelper<DIM>(node, DIM_CMP);
     }
 
     /**
@@ -228,8 +230,9 @@ protected:                      // DO NOT USE private HERE!
      */
     template<size_t DIM_CMP, size_t DIM>
     Node* findMax(Node* node) {
-        constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
-        // TODO: implement this function
+        // constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
+        // FIXME: implemented
+        return findMaxHelper<DIM>(node, DIM_CMP);
     }
 
     template<size_t DIM>
@@ -285,9 +288,73 @@ protected:                      // DO NOT USE private HERE!
         if (k==thisNode->key()){  // FIXME: std::tuple should have an overload for ==
             return thisNode;
         }
-        if (compareKey<DIM>(k, thisNode->key()))  // k[dim] < thisNode->key()[dim]
+        if (compareKey<DIM>(k, thisNode->key())){ // k[dim] < thisNode->key()[dim]
+            return findHelper<DIM_NEXT>(thisNode->left, k);
+        }
+        else{
+            return findHelper<DIM_NEXT>(thisNode->right, k);
+        }
     }
 
+    template<size_t DIM>
+    bool insertHelper(Node* &thisNode, Key k, Value v, Node* parent){
+        constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
+        if (!thisNode){
+            thisNode = new Node(k, v, parent);
+            return true;
+        }
+        if (k==thisNode->key()){
+            thisNode->value()=v;
+        }
+        if (compareKey<DIM>(k, thisNode->key())){
+            return insertHelper<DIM_NEXT>(thisNode->left, k, v, thisNode);
+        }
+        else{
+            return insertHelper<DIM_NEXT>(thisNode->right, k, v, thisNode);
+        }
+    }
+
+    template<size_t DIM>
+    Node* findMinHelper(Node *thisNode, size_t dimCmp){
+        constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
+        if (!thisNode) {
+            return thisNode;
+        }
+        Node *min = findMinHelper<DIM_NEXT>(thisNode->left, dimCmp);
+        if (dimCmp != DIM){
+            Node* rightMin = findMinHelper<DIM_NEXT>(thisNode->right, dimCmp);
+            if (!compareNode<dimCmp>(min, rightMin)){
+                min = rightMin;
+            }
+        }
+        if (compareNode<dimCmp>(min, thisNode)){
+            return min;
+        }
+        else {
+            return thisNode;
+        }
+    }
+
+    template<size_t DIM>
+    Node* findMaxHelper(Node* thisNode, size_t dimCmp){
+        constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
+        if (!thisNode) {
+            return thisNode;
+        }
+        Node *max = findMaxHelper<DIM_NEXT>(thisNode->right, dimCmp);
+        if (dimCmp != DIM){
+            Node* leftMax = findMaxHelper<DIM_NEXT>(thisNode->left, dimCmp);
+            if (compareNode<dimCmp>(max, leftMax)){
+                max = leftMax;
+            }
+        }
+        if (!compareNode<dimCmp>(max, thisNode)){
+            return max;
+        }
+        else {
+            return thisNode;
+        }
+    }
 public:
     KDTree() = default;
 
