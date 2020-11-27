@@ -40,6 +40,16 @@ protected:
         const Key& key() { return data.first; }
 
         Value& value() { return data.second; }
+
+        bool isLeafNode() {return !left && !right;}
+
+        bool isLeftChild() {return parent && this == this->parent->left;}
+
+        bool isRightChild() {return parent && this == this->parent->right;}
+
+        bool hasLeftSubTree() {return this->left;}
+
+        bool hasRightSubTree() {return this->right;}
     };
 
 public:
@@ -59,20 +69,22 @@ public:
          * Time complexity: O(log n)
          */
         void increment() {
-            // FIXME:
+            // FIXME: implemented
+            // TODO: edge cases
             if (node->right){ // Middle node
                 if (node->right->left){ // right children has left children
                     node = node->right;
                     while (node->left){
                         node = node->left; // way down to the leftmost node
                     }
+                    return;
                 }
                 else{ // right children has no left children
                     node = node->right;
                 }
             }
             else if(!node->right){ // leaf node
-                if (node->parent->left==node){ // node is left children of its parent
+                if (node->isLeftChild()){ // node is left children of its parent
                     node = node->parent;
                 }
                 else { // node is right children of its parent
@@ -86,7 +98,28 @@ public:
          * Time complexity: O(log n)
          */
         void decrement() {
-            // TODO: Implement this function
+            // FIXME: implemented
+            // TODO: edge cases
+            if (node->left){
+                if (node->left->right){
+                    node = node->left;
+                    while(node->right){
+                        node = node->right;
+                    }
+                    return;
+                }
+                else{
+                    node = node->left;
+                }
+            }
+            else if (!node->left){
+                if(node->isRightChild()){
+                    node = node->parent;
+                }
+                else{
+                    node = node->parent->parent;
+                }
+            }
         }
 
     public:
@@ -265,8 +298,9 @@ protected:                      // DO NOT USE private HERE!
      */
     template<size_t DIM>
     Node* erase(Node* node, const Key& key) {
-        constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
-        // TODO: implement this function
+        // constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
+        // FIXME: implemented
+        return eraseHelper<DIM>(node, key, 0);
     }
 
     template<size_t DIM>
@@ -355,6 +389,72 @@ protected:                      // DO NOT USE private HERE!
             return thisNode;
         }
     }
+
+    template<size_t DIM>
+    Node* eraseHelper(Node* thisNode, Key k, size_t depth = 0){
+        constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
+        size_t dimension = depth % KeySize;
+        if (k == thisNode->key()){
+            if (thisNode->isLeafNode()) { // Node is a leaf
+                deleteNodeHelper(thisNode);
+                return nullptr;
+            }
+            else if (thisNode->hasRightSubTree()){
+                Node *minNode = findMinHelper<DIM>(thisNode->right, dimension);
+                thisNode->key() = minNode->key();
+                thisNode->value() = minNode->value();
+                thisNode->right = eraseHelper<DIM_NEXT>(thisNode->right, minNode->key(), depth + 1);
+            }
+            else if (thisNode->hasLeftSubTree()){
+                Node* maxNode = findMaxHelper<DIM_NEXT>(thisNode->left, dimension);
+                thisNode->key() = maxNode->key();
+                thisNode->value() = maxNode->value();
+                thisNode->left = eraseHelper<DIM_NEXT>(maxNode->left, maxNode->key() ,depth + 1);
+;            }
+        }
+        else{
+            if (compareKey<dimension>(k, thisNode->key())){
+                thisNode->left = eraseHelper<DIM_NEXT>(thisNode->left, thisNode->key(), depth + 1);
+            }
+            else{
+                thisNode->right = eraseHelper<DIM_NEXT>(thisNode->right, thisNode->key(), depth + 1);
+            }
+        }
+        return thisNode;
+    }
+
+    // Only used for leaf nodes
+    void deleteNodeHelper(Node* thisNode){
+        if (thisNode == thisNode->parent->left){
+            thisNode->parent->left = nullptr;
+        }
+        else if (thisNode == thisNode->parent->right){
+            thisNode->parent->right = nullptr;
+        }
+        delete thisNode;
+    }
+
+    template<size_t DIM>
+    Node* constructHelper(std::vector<std::pair<Key, Value>> v){
+        constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
+        if (v.size()==0){
+            return nullptr;
+        }
+        
+    }
+
+    template<typename Compare>
+    bool compareAllKeys(const Data& a, const Data& b, Compare compare = Compare()){
+        const Key keyA = a.first;
+        const Key keyB = b.first;
+        for (size_t DIM = 0; DIM < KeySize; DIM++) {
+            if (!std::get<DIM>(a)==std::get<DIM>(b)){ // keys not equal
+                return compareKey<DIM, Compare>(keyA, keyB);
+            }
+        }
+        return false;
+    }
+
 public:
     KDTree() = default;
 
@@ -364,6 +464,11 @@ public:
      */
     explicit KDTree(std::vector<std::pair<Key, Value>> v) {
         // TODO: implement this function
+        std::stable_sort(v.begin(), v.end(), compareAllKeys());
+        auto eraseIt = std::unique(v.rbegin(), v.rend());
+        v.erase(v.begin(), eraseIt.base());
+        root = constructHelper<0>(v);
+        return *this;
     }
 
     /**
