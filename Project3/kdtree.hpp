@@ -26,6 +26,7 @@ public:
     typedef std::tuple<KeyTypes...> Key;
     typedef ValueType Value;
     typedef std::pair<const Key, Value> Data;
+    typedef typename std::vector<std::pair<Key, Value>>::iterator inputVecIt;
     static inline constexpr size_t KeySize = std::tuple_size<Key>::value;
     static_assert(KeySize > 0, "Can not construct KDTree with zero dimension");
 protected:
@@ -235,7 +236,7 @@ protected:                      // DO NOT USE private HERE!
     static Node* compareNode(Node* a, Node* b, Compare compare = Compare()) {
         if (!a) return b;
         if (!b) return a;
-        return compareKey<DIM, Compare>(a->key(), b->key(), compare) ? a : b;
+        return compareKey<DIM, std::less<>>(a->key(), b->key(), compare) ? a : b;
     }
 
     /**
@@ -322,7 +323,7 @@ protected:                      // DO NOT USE private HERE!
         if (k==thisNode->key()){  // FIXME: std::tuple should have an overload for ==
             return thisNode;
         }
-        if (compareKey<DIM>(k, thisNode->key())){ // k[dim] < thisNode->key()[dim]
+        if (compareKey<DIM, std::less<>>(k, thisNode->key())){ // k[dim] < thisNode->key()[dim]
             return findHelper<DIM_NEXT>(thisNode->left, k);
         }
         else{
@@ -340,7 +341,7 @@ protected:                      // DO NOT USE private HERE!
         if (k==thisNode->key()){
             thisNode->value()=v;
         }
-        if (compareKey<DIM>(k, thisNode->key())){
+        if (compareKey<DIM, std::less<>>(k, thisNode->key())){
             return insertHelper<DIM_NEXT>(thisNode->left, k, v, thisNode);
         }
         else{
@@ -391,33 +392,32 @@ protected:                      // DO NOT USE private HERE!
     }
 
     template<size_t DIM>
-    Node* eraseHelper(Node* thisNode, Key k, size_t depth = 0){
+    Node* eraseHelper(Node* thisNode, Key k){
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
-        size_t dimension = depth % KeySize;
         if (k == thisNode->key()){
             if (thisNode->isLeafNode()) { // Node is a leaf
                 deleteNodeHelper(thisNode);
                 return nullptr;
             }
             else if (thisNode->hasRightSubTree()){
-                Node *minNode = findMinHelper<DIM>(thisNode->right, dimension);
+                Node *minNode = findMinHelper<DIM>(thisNode->right);
                 thisNode->key() = minNode->key();
                 thisNode->value() = minNode->value();
-                thisNode->right = eraseHelper<DIM_NEXT>(thisNode->right, minNode->key(), depth + 1);
+                thisNode->right = eraseHelper<DIM_NEXT>(thisNode->right, minNode->key());
             }
             else if (thisNode->hasLeftSubTree()){
-                Node* maxNode = findMaxHelper<DIM_NEXT>(thisNode->left, dimension);
+                Node* maxNode = findMaxHelper<DIM_NEXT>(thisNode->left);
                 thisNode->key() = maxNode->key();
                 thisNode->value() = maxNode->value();
-                thisNode->left = eraseHelper<DIM_NEXT>(maxNode->left, maxNode->key() ,depth + 1);
+                thisNode->left = eraseHelper<DIM_NEXT>(maxNode->left, maxNode->key());
 ;            }
         }
         else{
-            if (compareKey<dimension>(k, thisNode->key())){
-                thisNode->left = eraseHelper<DIM_NEXT>(thisNode->left, thisNode->key(), depth + 1);
+            if (compareKey<DIM, std::less<>>(k, thisNode->key())){
+                thisNode->left = eraseHelper<DIM_NEXT>(thisNode->left, thisNode->key());
             }
             else{
-                thisNode->right = eraseHelper<DIM_NEXT>(thisNode->right, thisNode->key(), depth + 1);
+                thisNode->right = eraseHelper<DIM_NEXT>(thisNode->right, thisNode->key());
             }
         }
         return thisNode;
@@ -435,25 +435,59 @@ protected:                      // DO NOT USE private HERE!
     }
 
     template<size_t DIM>
-    Node* constructHelper(std::vector<std::pair<Key, Value>> v){
+    Node* constructHelper(Node* parent, inputVecIt beginIt, inputVecIt endIt){
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
-        if (v.size()==0){
+        size_t vecSize = (size_t)(endIt - beginIt);
+        if (vecSize == 0){
             return nullptr;
         }
-        
+        vecSize /= 2;
+        inputVecIt medianIt = beginIt + vecSize;
+        std::cout << beginIt->second << " " << medianIt->second << " " << (endIt-1)->second << " " << std::endl;
+        std::nth_element(beginIt, medianIt, endIt, compareAllKeysHelper<DIM>); // partition data into left, median and right
+        Node* thisNode = new Node(medianIt->first, medianIt->second, parent);
+        thisNode->left = constructHelper<DIM_NEXT>(thisNode, beginIt, medianIt - 1);
+        thisNode->right = constructHelper<DIM_NEXT>(thisNode, medianIt + 1, endIt);
+        return thisNode;
     }
 
-    template<typename Compare>
-    bool compareAllKeys(const Data& a, const Data& b, Compare compare = Compare()){
+    Node* copyConstructHelper(Node* thisNode, Node* parentNode){
+        Node* newNode = new Node(thisNode->key(), thisNode->value(), parentNode);
+        if (thisNode->hasLeftSubTree()){
+            newNode->left = copyConstructHelper(thisNode->left, thisNode);
+        }
+        if (thisNode->hasRightSubTree()){
+            newNode->right = copyConstructHelper(thisNode->right, thisNode);
+        }
+        return thisNode;
+    }
+
+    void deleteHelper(Node* thisNode){
+        if (thisNode->hasLeftSubTree()){
+            deleteHelper(thisNode->left);
+        }
+        if (thisNode->hasRightSubTree()){
+            deleteNodeHelper(thisNode->right);
+        }
+        delete thisNode;
+    }
+
+    template<size_t DIM>
+    static bool compareAllKeysHelper(const Data& a, const Data& b){
+        constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         const Key keyA = a.first;
         const Key keyB = b.first;
-        for (size_t DIM = 0; DIM < KeySize; DIM++) {
-            if (!std::get<DIM>(a)==std::get<DIM>(b)){ // keys not equal
-                return compareKey<DIM, Compare>(keyA, keyB);
-            }
+        if (compareKey<DIM, std::less<>>(keyA, keyB)){ // A<B
+            return true;
         }
-        return false;
+        else{
+            if (DIM!=(KeySize-1)){
+                return compareAllKeysHelper<DIM_NEXT>(a,b);
+            }
+            return false;
+        }
     }
+    
 
 public:
     KDTree() = default;
@@ -464,32 +498,43 @@ public:
      */
     explicit KDTree(std::vector<std::pair<Key, Value>> v) {
         // TODO: implement this function
-        std::stable_sort(v.begin(), v.end(), compareAllKeys());
+        std::stable_sort(v.begin(), v.end(), compareAllKeysHelper<0>);
         auto eraseIt = std::unique(v.rbegin(), v.rend());
         v.erase(v.begin(), eraseIt.base());
-        root = constructHelper<0>(v);
-        return *this;
+        for (auto &i :v){
+            std::cout << i.second << " ";
+        }
+        std::cout << "\n";
+        root = constructHelper<0>(nullptr, v.begin(), v.end());
+        treeSize = v.size();
     }
 
     /**
      * Time complexity: O(n)
      */
     KDTree(const KDTree& that) {
-        // TODO: implement this function
+        // FIXME: implemented
+        treeSize = that.treeSize;
+        root = copyConstructHelper(&(that.root), nullptr);
     }
 
     /**
      * Time complexity: O(n)
      */
     KDTree& operator=(const KDTree& that) {
-        // TODO: implement this function
+        // FIXME: implemented
+        treeSize = that.treeSize;
+        deleteNodeHelper(root);
+        root = copyConstructHelper(&(that.root), nullptr);
+        return *this;
     }
 
     /**
      * Time complexity: O(n)
      */
     ~KDTree() {
-        // TODO: implement this function
+        // FIXME: implemented
+        deleteNodeHelper(root);
     }
 
     Iterator begin() {
@@ -553,3 +598,21 @@ public:
 
     size_t size() const { return treeSize; }
 };
+
+template<size_t SIZE, typename T>
+auto vector2tuple(std::vector<T> &vec) {
+    T t = T();
+    std::vector<T> tempvec;
+    tempvec.push_back(t);
+    tempvec.pop_back();  // trick the stupid compiler
+    if (!vec.empty()) {
+        t = vec.back();
+        vec.pop_back();
+    }
+    if constexpr (SIZE > 0) {
+        return std::tuple_cat(vector2tuple<SIZE - 1, T>(vec),
+                              std::make_tuple<T>(std::move(t)));
+    } else {
+        return std::make_tuple<>();
+    }
+}
