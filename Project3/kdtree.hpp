@@ -438,15 +438,16 @@ protected:                      // DO NOT USE private HERE!
     Node* constructHelper(Node* parent, inputVecIt beginIt, inputVecIt endIt){
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         size_t vecSize = (size_t)(endIt - beginIt);
-        if (vecSize == 0){
+        std::cout << vecSize <<std::endl;
+        if (vecSize == 0) {
             return nullptr;
         }
-        vecSize /= 2;
+        vecSize = (vecSize / 2 * 2 == vecSize) ? vecSize / 2 - 1 : vecSize / 2;
         inputVecIt medianIt = beginIt + vecSize;
         std::cout << beginIt->second << " " << medianIt->second << " " << (endIt-1)->second << " " << std::endl;
-        std::nth_element(beginIt, medianIt, endIt, compareAllKeysHelper<DIM>); // partition data into left, median and right
+        std::nth_element(beginIt, medianIt, endIt, [](const auto &a, const auto &b){return compareKey<DIM, std::less<>>(a.first, b.first);}); // partition data into left, median and right
         Node* thisNode = new Node(medianIt->first, medianIt->second, parent);
-        thisNode->left = constructHelper<DIM_NEXT>(thisNode, beginIt, medianIt - 1);
+        thisNode->left = constructHelper<DIM_NEXT>(thisNode, beginIt, medianIt);
         thisNode->right = constructHelper<DIM_NEXT>(thisNode, medianIt + 1, endIt);
         return thisNode;
     }
@@ -467,7 +468,7 @@ protected:                      // DO NOT USE private HERE!
             deleteHelper(thisNode->left);
         }
         if (thisNode->hasRightSubTree()){
-            deleteNodeHelper(thisNode->right);
+            deleteHelper(thisNode->right);
         }
         delete thisNode;
     }
@@ -477,17 +478,32 @@ protected:                      // DO NOT USE private HERE!
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         const Key keyA = a.first;
         const Key keyB = b.first;
-        if (compareKey<DIM, std::less<>>(keyA, keyB)){ // A<B
-            return true;
+        if (!compareKey<DIM, std::less<>>(keyA, keyB)){ // A<B
+            return false;
         }
         else{
             if (DIM!=(KeySize-1)){
                 return compareAllKeysHelper<DIM_NEXT>(a,b);
             }
-            return false;
+            return true;
         }
     }
-    
+
+    template<size_t DIM>
+    static bool compareAllKeysHelperGt(const Data& a, const Data& b){
+        constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
+        const Key keyA = a.first;
+        const Key keyB = b.first;
+        if (!compareKey<DIM, std::greater<>>(keyA, keyB)){ // A<B
+            return false;
+        }
+        else{
+            if (DIM!=(KeySize-1)){
+                return compareAllKeysHelper<DIM_NEXT>(a,b);
+            }
+            return true;
+        }
+    }
 
 public:
     KDTree() = default;
@@ -501,10 +517,6 @@ public:
         std::stable_sort(v.begin(), v.end(), compareAllKeysHelper<0>);
         auto eraseIt = std::unique(v.rbegin(), v.rend());
         v.erase(v.begin(), eraseIt.base());
-        for (auto &i :v){
-            std::cout << i.second << " ";
-        }
-        std::cout << "\n";
         root = constructHelper<0>(nullptr, v.begin(), v.end());
         treeSize = v.size();
     }
@@ -534,7 +546,7 @@ public:
      */
     ~KDTree() {
         // FIXME: implemented
-        deleteNodeHelper(root);
+        deleteHelper(root);
     }
 
     Iterator begin() {

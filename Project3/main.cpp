@@ -6,9 +6,9 @@
 using namespace std;
 int main(){
     int k1[5] = {1,2,3,4,5};
-    int k2[5] = {2,7,8,9,0};
+    int k2[5] = {2,3,8,9,0};
     int k3[5] = {3,4,3,2,1};
-    int k4[5] = {4,9,8,7,6};
+    int k4[5] = {4,5,8,7,6};
     std::vector<int> v1(k1, k1+5);
     std::vector<int> v2(k2, k2+5);
     std::vector<int> v3(k3, k3+5);
