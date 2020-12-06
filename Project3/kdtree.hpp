@@ -42,15 +42,35 @@ protected:
 
         Value& value() { return data.second; }
 
-        bool isLeafNode() {return !left && !right;}
+        bool isLeafNode() { return (left==nullptr) && (right==nullptr); }
 
-        bool isLeftChild() {return parent && this == this->parent->left;}
+        bool isLeftChild() { return (parent!=nullptr) && (this==this->parent->left); }
 
-        bool isRightChild() {return parent && this == this->parent->right;}
+        bool isRightChild() { return (parent!=nullptr) && (this==this->parent->right); }
 
-        bool hasLeftSubTree() {return this->left;}
+        bool hasLeftSubTree() { return !(left==nullptr); }
 
-        bool hasRightSubTree() {return this->right;}
+        bool hasRightSubTree() { return !(right==nullptr); }
+
+        bool isRightMostNode() {
+            //if (!this->isLeafNode()) { return false; }
+            Node* thisNode = this;
+            while (thisNode->parent) {
+                if (!(thisNode==thisNode->parent->right)) { return false; }
+                thisNode = thisNode->parent;
+            }
+            return true;
+        }
+
+        bool isLeftMostNode() {
+            //if (!this->isLeafNode()) { return false; }
+            Node* thisNode = this;
+            while (thisNode->parent) {
+                if (!(thisNode==thisNode->parent->left)) { return false; }
+                thisNode = thisNode->parent;
+            }
+            return true;
+        }
     };
 
 public:
@@ -89,6 +109,10 @@ public:
                     node = node->parent;
                 }
                 else { // node is right children of its parent
+                    if (node->isRightMostNode()){
+                        node = nullptr;
+                        return;
+                    }
                     node = node->parent->parent;
                 }
             }
@@ -118,6 +142,10 @@ public:
                     node = node->parent;
                 }
                 else{
+                    if (node->isLeftMostNode()){
+                        node = nullptr;
+                        return;
+                    }
                     node = node->parent->parent;
                 }
             }
@@ -187,7 +215,7 @@ protected:                      // DO NOT USE private HERE!
     Node* find(const Key& key, Node* node) {
         //constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         // FIXME: implemented
-        return findHelper<DIM>(root, key);
+        return findHelper<DIM>(node, key);
     }
 
     /**
@@ -204,7 +232,7 @@ protected:                      // DO NOT USE private HERE!
     bool insert(const Key& key, const Value& value, Node*& node, Node* parent) {
         // constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         // FIXME: implemented
-        return insertHelper(node, key, value, parent);
+        return insertHelper<DIM>(node, key, value, parent);
     }
 
     /**
@@ -218,8 +246,11 @@ protected:                      // DO NOT USE private HERE!
      * @return relationship of two keys on a dimension with the compare function
      */
     template<size_t DIM, typename Compare>
-    static bool compareKey(const Key& a, const Key& b, Compare compare = Compare()) {
-        return compare(std::get<DIM>(a), std::get<DIM>(b));
+    static bool compareKey(const Key &a, const Key &b, Compare compare = Compare()) {
+        if (std::get<DIM>(a) != std::get<DIM>(b)){
+            return compare(std::get<DIM>(a), std::get<DIM>(b));
+        }
+        return compare(a, b);
     }
 
     /**
@@ -239,6 +270,13 @@ protected:                      // DO NOT USE private HERE!
         return compareKey<DIM, std::less<>>(a->key(), b->key(), compare) ? a : b;
     }
 
+    template<size_t DIM, typename Compare>
+    static Node* compareNodeGt(Node* a, Node* b, Compare compare = Compare()) {
+        if (!a) return b;
+        if (!b) return a;
+        return compareKey<DIM, std::greater<>>(a->key(), b->key(), compare) ? a : b;
+    }
+
     /**
      * Find the minimum node on a dimension
      * Time Complexity: ?
@@ -251,7 +289,7 @@ protected:                      // DO NOT USE private HERE!
     Node* findMin(Node* node) {
         //constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         // FIXME: implemented
-        return findMinHelper<DIM>(node, DIM_CMP);
+        return findMinHelper<DIM_CMP, DIM>(node);
     }
 
     /**
@@ -266,7 +304,7 @@ protected:                      // DO NOT USE private HERE!
     Node* findMax(Node* node) {
         // constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         // FIXME: implemented
-        return findMaxHelper<DIM>(node, DIM_CMP);
+        return findMaxHelper<DIM_CMP, DIM>(node);
     }
 
     template<size_t DIM>
@@ -301,7 +339,7 @@ protected:                      // DO NOT USE private HERE!
     Node* erase(Node* node, const Key& key) {
         // constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         // FIXME: implemented
-        return eraseHelper<DIM>(node, key, 0);
+        return eraseHelper<DIM>(node, key);
     }
 
     template<size_t DIM>
@@ -332,92 +370,113 @@ protected:                      // DO NOT USE private HERE!
     }
 
     template<size_t DIM>
-    bool insertHelper(Node* &thisNode, Key k, Value v, Node* parent){
+    bool insertHelper(Node* &thisNode, Key k, Value v, Node* parent, int fromLeft=0){
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         if (!thisNode){
             thisNode = new Node(k, v, parent);
+            if (fromLeft==1) { parent->left = thisNode; }
+            else if (fromLeft==-1){ parent->right = thisNode; }
+            treeSize++;
             return true;
         }
         if (k==thisNode->key()){
             thisNode->value()=v;
         }
         if (compareKey<DIM, std::less<>>(k, thisNode->key())){
-            return insertHelper<DIM_NEXT>(thisNode->left, k, v, thisNode);
+            return insertHelper<DIM_NEXT>(thisNode->left, k, v, thisNode, 1);
         }
         else{
-            return insertHelper<DIM_NEXT>(thisNode->right, k, v, thisNode);
+            return insertHelper<DIM_NEXT>(thisNode->right, k, v, thisNode, -1);
         }
     }
 
-    template<size_t DIM>
-    Node* findMinHelper(Node *thisNode, size_t dimCmp){
+//    template<size_t DIM>
+//    Node* minNode(Node* node1, Node* node2){
+//        std::cout << ((node1!= nullptr)?node1->value():-999) << " and " << ((node2!=nullptr)?node2->value():-999) << " in DIM " << DIM << "\n";
+//        if (!node1 && !node2) { return node1; }
+//        if (!node1) { return node2; }
+//        if (!node2) { return node1; }
+//        if (compareNode<DIM, std::less<>>(node1, node2)) { return node1; }
+//        else { return node2; }
+//    }
+//
+//    template<size_t DIM>
+//    Node* maxNode(Node* node1, Node* node2){
+//        if (!node1 && !node2) { return node1; }
+//        if (!node1) { return node2; }
+//        if (!node2) { return node1; }
+//        if (!compareNode<DIM, std::less<>>(node1, node2) && node1->key()!=node2->key()) { return node1; }
+//        else { return node2; }
+//    }
+
+    template<size_t DIM_CMP, size_t DIM>
+    Node* findMinHelper(Node *thisNode){
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         if (!thisNode) {
             return thisNode;
         }
-        Node *min = findMinHelper<DIM_NEXT>(thisNode->left, dimCmp);
-        if (dimCmp != DIM){
-            Node* rightMin = findMinHelper<DIM_NEXT>(thisNode->right, dimCmp);
-            if (!compareNode<dimCmp>(min, rightMin)){
-                min = rightMin;
-            }
+        Node *min = findMinHelper<DIM_CMP, DIM_NEXT>(thisNode->left);
+        if (DIM_CMP != DIM){
+            Node* rightMin = findMinHelper<DIM_CMP, DIM_NEXT>(thisNode->right);
+            min = compareNode<DIM_CMP,std::less<>>(min, rightMin);
         }
-        if (compareNode<dimCmp>(min, thisNode)){
-            return min;
-        }
-        else {
-            return thisNode;
-        }
+        return compareNode<DIM_CMP,std::less<>>(min, thisNode);
     }
 
-    template<size_t DIM>
-    Node* findMaxHelper(Node* thisNode, size_t dimCmp){
+    template<size_t DIM_CMP, size_t DIM>
+    Node* findMaxHelper(Node* thisNode){
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         if (!thisNode) {
             return thisNode;
         }
-        Node *max = findMaxHelper<DIM_NEXT>(thisNode->right, dimCmp);
-        if (dimCmp != DIM){
-            Node* leftMax = findMaxHelper<DIM_NEXT>(thisNode->left, dimCmp);
-            if (compareNode<dimCmp>(max, leftMax)){
-                max = leftMax;
-            }
+        Node *max = findMaxHelper<DIM_CMP, DIM_NEXT>(thisNode->right);
+        if (DIM_CMP != DIM){
+            Node* leftMax = findMaxHelper<DIM_CMP, DIM_NEXT>(thisNode->left);
+            max = compareNodeGt<DIM_CMP,std::greater<>>(leftMax, max);
         }
-        if (!compareNode<dimCmp>(max, thisNode)){
-            return max;
-        }
-        else {
-            return thisNode;
-        }
+        return compareNodeGt<DIM_CMP,std::greater<>>(thisNode, max);
     }
 
     template<size_t DIM>
-    Node* eraseHelper(Node* thisNode, Key k){
+    Node* eraseHelper(Node* &thisNode, const Key k){
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
+        if (!thisNode) {
+            return nullptr;
+        }
         if (k == thisNode->key()){
+            //std::cout << "Node " << thisNode->value() << " left: " << thisNode->hasLeftSubTree() << " right: " << thisNode->hasRightSubTree() << " isLeaf: " << thisNode->isLeafNode() << std::endl;
             if (thisNode->isLeafNode()) { // Node is a leaf
                 deleteNodeHelper(thisNode);
+                treeSize--;
                 return nullptr;
             }
             else if (thisNode->hasRightSubTree()){
-                Node *minNode = findMinHelper<DIM>(thisNode->right);
-                thisNode->key() = minNode->key();
-                thisNode->value() = minNode->value();
-                thisNode->right = eraseHelper<DIM_NEXT>(thisNode->right, minNode->key());
+                Node *minNode = findMinHelper<DIM, DIM_NEXT>(thisNode->right);
+                Node *left = thisNode->left;
+                Node *right = thisNode->right;
+                Node *parent = thisNode->parent;
+                delete thisNode;
+                thisNode = new Node(minNode->key(), minNode->value(), parent);
+                thisNode->left = left;
+                thisNode->right = eraseHelper<DIM_NEXT>(right, thisNode->key());
             }
             else if (thisNode->hasLeftSubTree()){
-                Node* maxNode = findMaxHelper<DIM_NEXT>(thisNode->left);
-                thisNode->key() = maxNode->key();
-                thisNode->value() = maxNode->value();
-                thisNode->left = eraseHelper<DIM_NEXT>(maxNode->left, maxNode->key());
+                Node *maxNode = findMaxHelper<DIM, DIM_NEXT>(thisNode->left);
+                Node *left = thisNode->left;
+                Node *right = thisNode->right;
+                Node *parent = thisNode->parent;
+                delete thisNode;
+                thisNode = new Node(maxNode->key(), maxNode->value(), parent);
+                thisNode->right = right;
+                thisNode->left = eraseHelper<DIM_NEXT>(left, thisNode->key());
 ;            }
         }
         else{
             if (compareKey<DIM, std::less<>>(k, thisNode->key())){
-                thisNode->left = eraseHelper<DIM_NEXT>(thisNode->left, thisNode->key());
+                thisNode->left = eraseHelper<DIM_NEXT>(thisNode->left, k);
             }
             else{
-                thisNode->right = eraseHelper<DIM_NEXT>(thisNode->right, thisNode->key());
+                thisNode->right = eraseHelper<DIM_NEXT>(thisNode->right, k);
             }
         }
         return thisNode;
@@ -438,13 +497,13 @@ protected:                      // DO NOT USE private HERE!
     Node* constructHelper(Node* parent, inputVecIt beginIt, inputVecIt endIt){
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         size_t vecSize = (size_t)(endIt - beginIt);
-        std::cout << vecSize <<std::endl;
+        //std::cout << vecSize <<std::endl;
         if (vecSize == 0) {
             return nullptr;
         }
         vecSize = (vecSize / 2 * 2 == vecSize) ? vecSize / 2 - 1 : vecSize / 2;
         inputVecIt medianIt = beginIt + vecSize;
-        std::cout << beginIt->second << " " << medianIt->second << " " << (endIt-1)->second << " " << std::endl;
+        //std::cout << beginIt->second << " " << medianIt->second << " " << (endIt-1)->second << " " << std::endl;
         std::nth_element(beginIt, medianIt, endIt, [](const auto &a, const auto &b){return compareKey<DIM, std::less<>>(a.first, b.first);}); // partition data into left, median and right
         Node* thisNode = new Node(medianIt->first, medianIt->second, parent);
         thisNode->left = constructHelper<DIM_NEXT>(thisNode, beginIt, medianIt);
@@ -527,7 +586,7 @@ public:
     KDTree(const KDTree& that) {
         // FIXME: implemented
         treeSize = that.treeSize;
-        root = copyConstructHelper(&(that.root), nullptr);
+        root = copyConstructHelper(that.root, nullptr);
     }
 
     /**
@@ -537,7 +596,7 @@ public:
         // FIXME: implemented
         treeSize = that.treeSize;
         deleteNodeHelper(root);
-        root = copyConstructHelper(&(that.root), nullptr);
+        root = copyConstructHelper(that.root, nullptr);
         return *this;
     }
 
