@@ -3,7 +3,8 @@
 #include <algorithm>
 #include <cassert>
 #include <stdexcept>
-
+#include <iostream>
+#include <string>
 /**
  * An abstract template base of the KDTree class
  */
@@ -92,6 +93,7 @@ public:
         void increment() {
             // FIXME: implemented
             // TODO: edge cases
+            //std::cout << "Incr" << std::endl;
             if (node->right){ // Middle node
                 if (node->right->left){ // right children has left children
                     node = node->right;
@@ -113,7 +115,10 @@ public:
                         node = nullptr;
                         return;
                     }
-                    node = node->parent->parent;
+                    while (node->isRightChild()){
+                        node = node->parent;
+                    }
+                    node = node->parent;
                 }
             }
         }
@@ -125,6 +130,7 @@ public:
         void decrement() {
             // FIXME: implemented
             // TODO: edge cases
+            //std::cout << "Decr" << std::endl;
             if (node->left){
                 if (node->left->right){
                     node = node->left;
@@ -146,7 +152,10 @@ public:
                         node = nullptr;
                         return;
                     }
-                    node = node->parent->parent;
+                    while (node->isLeftChild()){
+                        node = node->parent;
+                    }
+                    node = node->parent;
                 }
             }
         }
@@ -251,6 +260,11 @@ protected:                      // DO NOT USE private HERE!
             return compare(std::get<DIM>(a), std::get<DIM>(b));
         }
         return compare(a, b);
+    }
+
+    template<size_t DIM, typename Compare>
+    static bool compareXhy(const Key &a, const Key &b, Compare compare = Compare()) {
+        return compare(std::get<DIM>(a), std::get<DIM>(b));
     }
 
     /**
@@ -374,40 +388,22 @@ protected:                      // DO NOT USE private HERE!
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         if (!thisNode){
             thisNode = new Node(k, v, parent);
-            if (fromLeft==1) { parent->left = thisNode; }
-            else if (fromLeft==-1){ parent->right = thisNode; }
+            if (parent!=nullptr && fromLeft==1) { parent->left = thisNode; }
+            else if (parent!=nullptr && fromLeft==-1){ parent->right = thisNode; }
             treeSize++;
             return true;
         }
         if (k==thisNode->key()){
-            thisNode->value()=v;
+            thisNode->data.second = v;
+            return true;
         }
-        if (compareKey<DIM, std::less<>>(k, thisNode->key())){
+        if (compareXhy<DIM, std::less<>>(k, thisNode->key())){
             return insertHelper<DIM_NEXT>(thisNode->left, k, v, thisNode, 1);
         }
         else{
             return insertHelper<DIM_NEXT>(thisNode->right, k, v, thisNode, -1);
         }
     }
-
-//    template<size_t DIM>
-//    Node* minNode(Node* node1, Node* node2){
-//        std::cout << ((node1!= nullptr)?node1->value():-999) << " and " << ((node2!=nullptr)?node2->value():-999) << " in DIM " << DIM << "\n";
-//        if (!node1 && !node2) { return node1; }
-//        if (!node1) { return node2; }
-//        if (!node2) { return node1; }
-//        if (compareNode<DIM, std::less<>>(node1, node2)) { return node1; }
-//        else { return node2; }
-//    }
-//
-//    template<size_t DIM>
-//    Node* maxNode(Node* node1, Node* node2){
-//        if (!node1 && !node2) { return node1; }
-//        if (!node1) { return node2; }
-//        if (!node2) { return node1; }
-//        if (!compareNode<DIM, std::less<>>(node1, node2) && node1->key()!=node2->key()) { return node1; }
-//        else { return node2; }
-//    }
 
     template<size_t DIM_CMP, size_t DIM>
     Node* findMinHelper(Node *thisNode){
@@ -452,6 +448,8 @@ protected:                      // DO NOT USE private HERE!
             }
             else if (thisNode->hasRightSubTree()){
                 Node *minNode = findMinHelper<DIM, DIM_NEXT>(thisNode->right);
+                bool isLeft = thisNode->isLeftChild();
+                bool isRight = thisNode->isRightChild();
                 Node *left = thisNode->left;
                 Node *right = thisNode->right;
                 Node *parent = thisNode->parent;
@@ -459,9 +457,17 @@ protected:                      // DO NOT USE private HERE!
                 thisNode = new Node(minNode->key(), minNode->value(), parent);
                 thisNode->left = left;
                 thisNode->right = eraseHelper<DIM_NEXT>(right, thisNode->key());
+                if (thisNode->parent && isLeft) {
+                    thisNode->parent->left = thisNode;
+                }
+                if (thisNode->parent && isRight) {
+                    thisNode->parent->right = thisNode;
+                }
             }
             else if (thisNode->hasLeftSubTree()){
                 Node *maxNode = findMaxHelper<DIM, DIM_NEXT>(thisNode->left);
+                bool isLeft = thisNode->isLeftChild();
+                bool isRight = thisNode->isRightChild();
                 Node *left = thisNode->left;
                 Node *right = thisNode->right;
                 Node *parent = thisNode->parent;
@@ -469,6 +475,12 @@ protected:                      // DO NOT USE private HERE!
                 thisNode = new Node(maxNode->key(), maxNode->value(), parent);
                 thisNode->right = right;
                 thisNode->left = eraseHelper<DIM_NEXT>(left, thisNode->key());
+                if (thisNode->parent && isLeft) {
+                    thisNode->parent->left = thisNode;
+                }
+                if (thisNode->parent && isRight) {
+                    thisNode->parent->right = thisNode;
+                }
 ;            }
         }
         else{
@@ -484,10 +496,10 @@ protected:                      // DO NOT USE private HERE!
 
     // Only used for leaf nodes
     void deleteNodeHelper(Node* thisNode){
-        if (thisNode == thisNode->parent->left){
+        if (thisNode->parent!=nullptr && thisNode==thisNode->parent->left){
             thisNode->parent->left = nullptr;
         }
-        else if (thisNode == thisNode->parent->right){
+        else if (thisNode->parent!=nullptr && thisNode==thisNode->parent->right){
             thisNode->parent->right = nullptr;
         }
         delete thisNode;
@@ -497,10 +509,10 @@ protected:                      // DO NOT USE private HERE!
     Node* constructHelper(Node* parent, inputVecIt beginIt, inputVecIt endIt){
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         size_t vecSize = (size_t)(endIt - beginIt);
-        //std::cout << vecSize <<std::endl;
         if (vecSize == 0) {
             return nullptr;
         }
+
         vecSize = (vecSize / 2 * 2 == vecSize) ? vecSize / 2 - 1 : vecSize / 2;
         inputVecIt medianIt = beginIt + vecSize;
         //std::cout << beginIt->second << " " << medianIt->second << " " << (endIt-1)->second << " " << std::endl;
@@ -511,15 +523,16 @@ protected:                      // DO NOT USE private HERE!
         return thisNode;
     }
 
-    Node* copyConstructHelper(Node* thisNode, Node* parentNode){
-        Node* newNode = new Node(thisNode->key(), thisNode->value(), parentNode);
-        if (thisNode->hasLeftSubTree()){
-            newNode->left = copyConstructHelper(thisNode->left, thisNode);
+    Node* copyConstructHelper(Node* thatNode, Node* parentNode){
+        if (!thatNode) { return nullptr; }
+        Node* newNode = new Node(thatNode->key(), thatNode->value(), parentNode);
+        if (thatNode->hasLeftSubTree()){
+            newNode->left = copyConstructHelper(thatNode->left, newNode);
         }
-        if (thisNode->hasRightSubTree()){
-            newNode->right = copyConstructHelper(thisNode->right, thisNode);
+        if (thatNode->hasRightSubTree()){
+            newNode->right = copyConstructHelper(thatNode->right, newNode);
         }
-        return thisNode;
+        return newNode;
     }
 
     void deleteHelper(Node* thisNode){
@@ -573,9 +586,12 @@ public:
      */
     explicit KDTree(std::vector<std::pair<Key, Value>> v) {
         // TODO: implement this function
+//        for (auto &item: v) {
+//            std::cout << "Constr " << std::get<0>(item.first) << " " << std::get<1>(item.first) << " " << std::get<2>(item.first) << " Val: " << item.second << std::endl;
+//        }
         std::stable_sort(v.begin(), v.end(), compareAllKeysHelper<0>);
         auto eraseIt = std::unique(v.rbegin(), v.rend());
-        v.erase(v.begin(), eraseIt.base());
+        v.erase(v.begin(), ++eraseIt.base());
         root = constructHelper<0>(nullptr, v.begin(), v.end());
         treeSize = v.size();
     }
@@ -624,6 +640,7 @@ public:
     }
 
     void insert(const Key& key, const Value& value) {
+        //std::cout << "Insert " << std::get<0>(key) << " " << std::get<1>(key) << " " << std::get<2>(key) << " Val: " << value << std::endl;
         insert<0>(key, value, root, nullptr);
     }
 
@@ -646,12 +663,14 @@ public:
     }
 
     bool erase(const Key& key) {
+        //std::cout << "Erase "  << std::get<0>(key) << " " << std::get<1>(key) << " " << std::get<2>(key);
         auto prevSize = treeSize;
         erase<0>(root, key);
         return prevSize > treeSize;
     }
 
     Iterator erase(Iterator it) {
+        //std::cout << "Erase "  << std::get<0>(it->key()) << " " << std::get<1>(it->key()) << " " << std::get<2>(it->key());
         if (it == end()) return it;
         auto node = it.node;
         if (!it.node->left && !it.node->right) {
@@ -667,11 +686,12 @@ public:
         return it;
     }
 
+
     size_t size() const { return treeSize; }
 };
 
 template<size_t SIZE, typename T>
-auto vector2tuple(std::vector<T> &vec) {
+auto vector3tuple(std::vector<T> &vec) {
     T t = T();
     std::vector<T> tempvec;
     tempvec.push_back(t);
@@ -681,7 +701,7 @@ auto vector2tuple(std::vector<T> &vec) {
         vec.pop_back();
     }
     if constexpr (SIZE > 0) {
-        return std::tuple_cat(vector2tuple<SIZE - 1, T>(vec),
+        return std::tuple_cat(vector3tuple<SIZE - 1, T>(vec),
                               std::make_tuple<T>(std::move(t)));
     } else {
         return std::make_tuple<>();
